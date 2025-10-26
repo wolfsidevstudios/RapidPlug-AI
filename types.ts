@@ -16,3 +16,10 @@ export interface SavedExtension {
   files: GeneratedFile[];
   messages: Message[];
 }
+
+export interface User {
+  id: string; // Google's 'sub' claim
+  name: string;
+  email: string;
+  picture: string;
+}

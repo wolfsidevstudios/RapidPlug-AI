@@ -6,21 +6,20 @@ let ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 /**
  * Updates the Gemini API client with a new API key.
- * This is used if the user provides their own key in the settings.
+ * This function will throw an error if the key is structurally invalid.
  * @param apiKey The user-provided API key.
  */
 export function setApiKey(apiKey: string | null) {
-    if (apiKey && apiKey.trim() !== '') {
-        try {
-            ai = new GoogleGenAI({ apiKey });
-        } catch (e) {
-            console.error("Failed to initialize GoogleGenAI with user-provided key:", e);
-            // Revert to default if the new key is invalid
-            ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-        }
-    } else {
-        // Fallback to the environment key if the user-provided one is null or empty.
-        ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    // Use the provided key, or if it's null/empty, use the environment key.
+    const keyToUse = (apiKey && apiKey.trim() !== '') ? apiKey : process.env.API_KEY;
+
+    try {
+        // Attempt to create a new client. This will throw for malformed keys.
+        ai = new GoogleGenAI({ apiKey: keyToUse });
+    } catch (e) {
+        console.error("Failed to initialize GoogleGenAI with the provided key:", e);
+        // Re-throw a more user-friendly error to be caught by the UI.
+        throw new Error('The provided API Key is invalid or malformed.');
     }
 }
 

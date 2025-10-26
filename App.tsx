@@ -1,24 +1,44 @@
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
-import type { GeneratedFile, Message, SavedExtension } from './types';
+import type { GeneratedFile, Message, SavedExtension, User } from './types';
 import { generateExtensionCode, setApiKey } from './services/geminiService';
 import { 
     SparklesIcon, FileIcon, DownloadIcon, CopyIcon, ClipboardCheckIcon, EyeIcon, 
     CodeBracketIcon, ArrowUpIcon, InformationCircleIcon, MoonIcon, ClipboardTextIcon, 
     SwatchIcon, ClockIcon, Squares2X2Icon, UploadCloudIcon, ShieldCheckIcon,
-    BookmarkIcon, FolderIcon, TrashIcon, HomeIcon, AiSettingsSparkIcon
+    BookmarkIcon, FolderIcon, TrashIcon, HomeIcon, AiSettingsSparkIcon, GoogleIcon
 } from './components/icons';
 import { templates, ExtensionTemplate } from './templates';
 
 type ActiveTab = 'preview' | 'code' | 'instructions' | 'publishing';
 type WelcomeTab = 'templates' | 'my-extensions' | 'instructions' | 'publishing';
-type Route = '/' | '/builder' | '/settings';
+type Route = '/' | '/builder' | '/settings' | '/profile';
 
 const getRoute = (): Route => {
     const hash = window.location.hash;
     if (hash === '#/builder') return '/builder';
     if (hash === '#/settings') return '/settings';
+    if (hash === '#/profile') return '/profile';
     return '/';
 }
+
+const GOOGLE_CLIENT_ID = "127898517822-gdv986g9281c36jlakeisg63ukp3f438.apps.googleusercontent.com";
+
+
+// --- Utility Functions ---
+function decodeJwt(token: string): any {
+    try {
+        const base64Url = token.split('.')[1];
+        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+        const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
+            return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+        }).join(''));
+        return JSON.parse(jsonPayload);
+    } catch (e) {
+        console.error("Failed to decode JWT", e);
+        return null;
+    }
+}
+
 
 // --- Icon Mapping for Templates ---
 const ICONS: { [key: string]: React.FC<{className?: string}> } = {
@@ -31,12 +51,20 @@ const ICONS: { [key: string]: React.FC<{className?: string}> } = {
 
 
 // --- Sub Components ---
+const UserProfileCard: React.FC<{ user: User }> = ({ user }) => (
+    <a href="#/profile" className="flex items-center gap-2 p-1 pr-3 bg-gray-700 rounded-full hover:bg-gray-600 transition-colors">
+        <img src={user.picture} alt={user.name} className="w-8 h-8 rounded-full" />
+        <span className="font-medium text-sm text-white truncate">{user.name.split(' ')[0]}</span>
+    </a>
+);
 
 const HomeHeader: React.FC<{
   activeTab: WelcomeTab;
   onTabChange: (tab: WelcomeTab) => void;
   onGoHome: () => void;
-}> = ({ activeTab, onTabChange, onGoHome }) => {
+  user: User | null;
+  onLoginClick: () => void;
+}> = ({ activeTab, onTabChange, onGoHome, user, onLoginClick }) => {
   
   const TabButton: React.FC<{ tab: WelcomeTab; label: string; }> = ({ tab, label }) => (
     <button 
@@ -52,7 +80,7 @@ const HomeHeader: React.FC<{
   return (
     <header className="flex-shrink-0 p-4 w-full flex items-center justify-between">
       <div className="flex-1 flex items-center gap-4">
-        <a href="#/settings" className="p-2 text-gray-400 hover:text-white transition-colors" aria-label="Settings">
+        <a href="#/settings" className="p-2 text-white" aria-label="Settings">
             <AiSettingsSparkIcon className="w-6 h-6" />
         </a>
         <a href="#" onClick={(e) => { e.preventDefault(); onGoHome(); }} className="text-xl font-bold text-white">
@@ -68,25 +96,40 @@ const HomeHeader: React.FC<{
       </nav>
 
       <div className="flex-1 flex justify-end">
-        {/* Placeholder for potential right-side elements */}
+        {user ? (
+          <UserProfileCard user={user} />
+        ) : (
+          <button onClick={onLoginClick} className="px-5 py-2 bg-gray-200 text-gray-900 font-semibold rounded-full hover:bg-white transition-colors">
+            Login
+          </button>
+        )}
       </div>
     </header>
   )
 };
 
-const BuilderHeader: React.FC<{ onGoHome: () => void }> = ({ onGoHome }) => (
+const BuilderHeader: React.FC<{ onGoHome: () => void; user: User | null; onLoginClick: () => void; }> = ({ onGoHome, user, onLoginClick }) => (
    <header className="flex-shrink-0 p-4 w-full flex items-center justify-between">
-       <div className="flex items-center gap-4">
-            <a href="#/settings" className="p-2 text-gray-400 hover:text-white transition-colors" aria-label="Settings">
+       <div className="flex flex-1 items-center gap-4">
+            <a href="#/settings" className="p-2 text-white" aria-label="Settings">
                 <AiSettingsSparkIcon className="w-6 h-6" />
             </a>
             <a href="#" onClick={(e) => { e.preventDefault(); onGoHome(); }} className="text-xl font-bold text-white">
                 RapidPlug AI
             </a>
        </div>
-        <button onClick={onGoHome} className="p-2 text-gray-400 hover:text-white transition-colors duration-200">
-            <HomeIcon className="w-6 h-6" />
-        </button>
+        <div className="flex flex-1 justify-end items-center gap-4">
+             {user ? (
+              <UserProfileCard user={user} />
+            ) : (
+              <button onClick={onLoginClick} className="px-5 py-2 bg-gray-200 text-gray-900 font-semibold rounded-full hover:bg-white transition-colors">
+                Login
+              </button>
+            )}
+            <button onClick={onGoHome} className="p-2 text-gray-400 hover:text-white transition-colors duration-200">
+                <HomeIcon className="w-6 h-6" />
+            </button>
+       </div>
     </header>
 );
 
@@ -328,9 +371,10 @@ const PublishingGuidePanel: React.FC = () => (
 interface OutputPanelProps {
     files: GeneratedFile[];
     onSave: () => void;
+    user: User | null;
 }
 
-const OutputPanel: React.FC<OutputPanelProps> = ({ files, onSave }) => {
+const OutputPanel: React.FC<OutputPanelProps> = ({ files, onSave, user }) => {
     const [activeTab, setActiveTab] = useState<ActiveTab>('preview');
     const [selectedFilename, setSelectedFilename] = useState<string | null>(null);
     const selectedFile = useMemo(() => files.find(f => f.filename === selectedFilename), [files, selectedFilename]);
@@ -392,7 +436,7 @@ const OutputPanel: React.FC<OutputPanelProps> = ({ files, onSave }) => {
                     <TabButton tab="publishing" icon={<UploadCloudIcon className="w-5 h-5" />} />
                 </div>
                 <div className="flex items-center gap-3">
-                     <button onClick={onSave} disabled={files.length === 0} className="flex items-center gap-2 py-2 px-4 bg-slate-900 hover:bg-slate-800 border border-slate-700 text-white font-semibold rounded-full transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed">
+                     <button onClick={onSave} disabled={files.length === 0 || !user} title={!user ? "Please log in to save extensions" : ""} className="flex items-center gap-2 py-2 px-4 bg-slate-900 hover:bg-slate-800 border border-slate-700 text-white font-semibold rounded-full transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed">
                         <BookmarkIcon className="w-5 h-5" />
                         <span>Save</span>
                     </button>
@@ -473,25 +517,36 @@ interface MyExtensionsPanelProps {
   extensions: SavedExtension[];
   onLoad: (id: string) => void;
   onDelete: (id: string) => void;
+  user: User | null;
 }
 
-const MyExtensionsPanel: React.FC<MyExtensionsPanelProps> = ({ extensions, onLoad, onDelete }) => (
+const MyExtensionsPanel: React.FC<MyExtensionsPanelProps> = ({ extensions, onLoad, onDelete, user }) => (
     <div className="p-6 h-full overflow-y-auto scrollbar-thin">
         <div className="text-center mb-8">
             <h2 className="text-3xl font-bold text-white">My Saved Extensions</h2>
             <p className="text-lg text-gray-400 mt-2">Load a previous project or start a new one from a template.</p>
         </div>
-        {extensions.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {extensions.map(ext => (
-                    <SavedExtensionCard key={ext.id} extension={ext} onLoad={onLoad} onDelete={onDelete} />
-                ))}
-            </div>
+        {user ? (
+          <>
+            {extensions.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {extensions.map(ext => (
+                        <SavedExtensionCard key={ext.id} extension={ext} onLoad={onLoad} onDelete={onDelete} />
+                    ))}
+                </div>
+            ) : (
+                 <div className="text-center text-gray-500 mt-16">
+                    <FolderIcon className="w-16 h-16 mx-auto mb-4" />
+                    <h3 className="text-xl font-semibold">No extensions saved yet.</h3>
+                    <p>Once you build and save an extension, it will appear here.</p>
+                </div>
+            )}
+          </>
         ) : (
              <div className="text-center text-gray-500 mt-16">
-                <FolderIcon className="w-16 h-16 mx-auto mb-4" />
-                <h3 className="text-xl font-semibold">No extensions saved yet.</h3>
-                <p>Once you build and save an extension, it will appear here.</p>
+                <ShieldCheckIcon className="w-16 h-16 mx-auto mb-4" />
+                <h3 className="text-xl font-semibold">Please log in</h3>
+                <p>Log in to view and manage your saved extensions.</p>
             </div>
         )}
     </div>
@@ -550,9 +605,10 @@ interface WelcomePanelProps {
     onDeleteExtension: (id: string) => void;
     onSendMessage: (input: string) => void;
     isLoading: boolean;
+    user: User | null;
 }
 
-const WelcomePanel: React.FC<WelcomePanelProps> = ({ activeTab, onSelectTemplate, savedExtensions, onLoadExtension, onDeleteExtension, onSendMessage, isLoading }) => {
+const WelcomePanel: React.FC<WelcomePanelProps> = ({ activeTab, onSelectTemplate, savedExtensions, onLoadExtension, onDeleteExtension, onSendMessage, isLoading, user }) => {
     return (
         <div className="flex flex-col h-full overflow-y-auto scrollbar-thin">
             <div className="flex-shrink-0 text-center pt-16 pb-8 px-4">
@@ -562,7 +618,7 @@ const WelcomePanel: React.FC<WelcomePanelProps> = ({ activeTab, onSelectTemplate
 
             <div className="w-full flex-grow">
                 {activeTab === 'templates' && <TemplateLibrary onSelectTemplate={onSelectTemplate} />}
-                {activeTab === 'my-extensions' && <MyExtensionsPanel extensions={savedExtensions} onLoad={onLoadExtension} onDelete={onDeleteExtension} />}
+                {activeTab === 'my-extensions' && <MyExtensionsPanel extensions={savedExtensions} onLoad={onLoadExtension} onDelete={onDeleteExtension} user={user} />}
                 {activeTab === 'instructions' && <div className="max-w-4xl mx-auto"><InstructionsPanel permissions={[]} /></div>}
                 {activeTab === 'publishing' && <div className="max-w-4xl mx-auto"><PublishingGuidePanel /></div>}
             </div>
@@ -584,13 +640,14 @@ const BuilderPage: React.FC<{
     onSendMessage: (input: string) => void;
     files: GeneratedFile[];
     onSave: () => void;
-}> = ({ messages, isLoading, onSendMessage, files, onSave }) => (
+    user: User | null;
+}> = ({ messages, isLoading, onSendMessage, files, onSave, user }) => (
     <div className="grid grid-cols-1 md:grid-cols-12 overflow-hidden h-full">
         <div className="md:col-span-4 h-full">
             <ChatPanel messages={messages} isLoading={isLoading} onSendMessage={onSendMessage} />
         </div>
         <div className="md:col-span-8 h-full">
-            <OutputPanel files={files} onSave={onSave} />
+            <OutputPanel files={files} onSave={onSave} user={user} />
         </div>
     </div>
 );
@@ -601,21 +658,36 @@ const SettingsPage: React.FC<{
 }> = ({ onSaveApiKey, currentApiKey }) => {
     const [activeSection, setActiveSection] = useState('ai-settings');
     const [apiKeyInput, setApiKeyInput] = useState(currentApiKey);
-    const [saveStatus, setSaveStatus] = useState<'idle' | 'saved' | 'error'>('idle');
+    const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+    const [statusMessage, setStatusMessage] = useState('');
 
     useEffect(() => {
         setApiKeyInput(currentApiKey);
     }, [currentApiKey]);
 
+    const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        setApiKeyInput(e.target.value);
+        if (saveStatus !== 'idle') {
+            setSaveStatus('idle');
+            setStatusMessage('');
+        }
+    };
+
     const handleSave = () => {
+        setSaveStatus('saving');
+        setStatusMessage('');
         try {
-            onSaveApiKey(apiKeyInput);
+            onSaveApiKey(apiKeyInput); // This call can throw
             setSaveStatus('saved');
-            setTimeout(() => setSaveStatus('idle'), 2500);
+            setStatusMessage('API Key saved successfully!');
+            setTimeout(() => {
+                setSaveStatus('idle');
+                setStatusMessage('');
+            }, 3000);
         } catch (e) {
-            console.error('Failed to save API key', e);
+            const message = e instanceof Error ? e.message : "An unknown error occurred.";
             setSaveStatus('error');
-             setTimeout(() => setSaveStatus('idle'), 2500);
+            setStatusMessage(message);
         }
     };
 
@@ -664,7 +736,7 @@ const SettingsPage: React.FC<{
                                             type="password"
                                             id="api-key"
                                             value={apiKeyInput}
-                                            onChange={(e) => setApiKeyInput(e.target.value)}
+                                            onChange={handleInputChange}
                                             placeholder="Enter your Gemini API key"
                                             className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-2 text-white focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition"
                                         />
@@ -677,17 +749,110 @@ const SettingsPage: React.FC<{
                                     <div className="flex items-center gap-4 pt-4">
                                         <button
                                             onClick={handleSave}
-                                            className="px-5 py-2 bg-purple-600 hover:bg-purple-700 text-white font-semibold rounded-lg transition-colors"
+                                            disabled={saveStatus === 'saving' || saveStatus === 'saved'}
+                                            className="px-5 py-2 bg-purple-600 hover:bg-purple-700 text-white font-semibold rounded-lg transition-colors disabled:opacity-60 disabled:cursor-wait"
                                         >
-                                            Save Key
+                                            {saveStatus === 'saving' ? 'Validating...' : saveStatus === 'saved' ? 'Saved!' : 'Save Key'}
                                         </button>
-                                        {saveStatus === 'saved' && <p className="text-sm text-green-400">API Key saved successfully!</p>}
-                                        {saveStatus === 'error' && <p className="text-sm text-red-400">Failed to save key.</p>}
+                                        {statusMessage && (
+                                            <p className={`text-sm ${saveStatus === 'error' ? 'text-red-400' : 'text-green-400'}`}>
+                                                {statusMessage}
+                                            </p>
+                                        )}
                                     </div>
                                 </div>
                             </div>
                         )}
                     </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+interface ProfilePageProps {
+  user: User;
+  savedExtensions: SavedExtension[];
+  onLoadExtension: (id: string) => void;
+  onDeleteExtension: (id: string) => void;
+  onLogout: () => void;
+}
+
+const ProfilePage: React.FC<ProfilePageProps> = ({ user, savedExtensions, onLoadExtension, onDeleteExtension, onLogout }) => {
+    return (
+        <div className="h-full overflow-y-auto scrollbar-thin p-4 sm:p-8">
+            <div className="max-w-4xl mx-auto">
+                {/* Profile Header */}
+                <header className="flex flex-col sm:flex-row items-center gap-6 sm:gap-10 mb-10">
+                    <img src={user.picture} alt={user.name} className="w-32 h-32 rounded-full border-4 border-gray-700" />
+                    <div className="text-center sm:text-left">
+                        <h2 className="text-3xl font-bold text-white">{user.name}</h2>
+                        <p className="text-gray-400">{user.email}</p>
+                        <button onClick={onLogout} className="mt-4 px-4 py-2 text-sm bg-gray-700 hover:bg-red-500 hover:text-white rounded-lg transition-colors">
+                            Logout
+                        </button>
+                    </div>
+                </header>
+
+                {/* Extensions Grid */}
+                <div>
+                     <h3 className="text-xl font-bold text-white mb-6 pb-2 border-b border-gray-700">Recent Extensions</h3>
+                     {savedExtensions.length > 0 ? (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            {savedExtensions.map(ext => (
+                                <SavedExtensionCard key={ext.id} extension={ext} onLoad={onLoadExtension} onDelete={onDeleteExtension} />
+                            ))}
+                        </div>
+                    ) : (
+                         <div className="text-center text-gray-500 py-16">
+                            <FolderIcon className="w-16 h-16 mx-auto mb-4" />
+                            <h3 className="text-xl font-semibold">No extensions saved yet.</h3>
+                            <p>Build and save an extension, and it will appear here.</p>
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+interface LoginModalProps {
+    isOpen: boolean;
+    onClose: () => void;
+}
+
+const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
+    const modalRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const handleOutsideClick = (event: MouseEvent) => {
+            if (modalRef.current && !modalRef.current.contains(event.target as Node)) {
+                onClose();
+            }
+        };
+        if (isOpen) {
+            document.addEventListener('mousedown', handleOutsideClick);
+        }
+        return () => {
+            document.removeEventListener('mousedown', handleOutsideClick);
+        };
+    }, [isOpen, onClose]);
+
+    if (!isOpen) return null;
+
+    return (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
+            <div ref={modalRef} className="bg-gray-800 rounded-2xl shadow-lg w-full max-w-4xl h-auto max-h-[90vh] overflow-hidden flex">
+                {/* Left Side (Branding) */}
+                <div className="hidden md:flex flex-col items-center justify-center w-1/2 bg-gray-900 p-8 text-center">
+                    <SparklesIcon className="w-16 h-16 text-purple-400 mb-4" />
+                    <h2 className="text-3xl font-bold text-white">Welcome Back</h2>
+                    <p className="text-gray-400 mt-2">Sign in to save your extensions and access your projects from anywhere.</p>
+                </div>
+                {/* Right Side (Login) */}
+                <div className="w-full md:w-1/2 p-10 flex flex-col justify-center">
+                    <h3 className="text-2xl font-bold text-white mb-6">Login to your Account</h3>
+                    <div id="google-signin-button" className="flex justify-center"></div>
                 </div>
             </div>
         </div>
@@ -709,6 +874,8 @@ export default function App() {
     const [error, setError] = useState<string | null>(null);
     const [savedExtensions, setSavedExtensions] = useState<SavedExtension[]>([]);
     const [userApiKey, setUserApiKey] = useState('');
+    const [user, setUser] = useState<User | null>(null);
+    const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
 
      useEffect(() => {
         const handleHashChange = () => setRoute(getRoute());
@@ -717,23 +884,83 @@ export default function App() {
     }, []);
 
      useEffect(() => {
-        try {
-            const stored = localStorage.getItem('savedExtensions');
-            if (stored) {
-                setSavedExtensions(JSON.parse(stored));
-            }
-            const storedKey = localStorage.getItem('geminiApiKey') || '';
-            setUserApiKey(storedKey);
-            setApiKey(storedKey); // Initialize the service with the stored key
-        } catch (e) {
-            console.error("Failed to load from localStorage", e);
+        // Load user session from local storage
+        const storedUser = localStorage.getItem('user');
+        if (storedUser) {
+            const parsedUser = JSON.parse(storedUser);
+            setUser(parsedUser);
         }
-    }, []);
+        
+        // Initialize Google Sign-In
+        const google = (window as any).google;
+        if (google) {
+            google.accounts.id.initialize({
+                client_id: GOOGLE_CLIENT_ID,
+                callback: handleGoogleSignIn,
+            });
+             google.accounts.id.renderButton(
+                document.getElementById("google-signin-button"),
+                { theme: "outline", size: "large", type: 'standard', shape: 'pill', text: 'signin_with' } 
+            );
+        } else {
+            console.error("Google GSI client not loaded.");
+        }
+
+        const storedKey = localStorage.getItem('geminiApiKey') || '';
+        setUserApiKey(storedKey);
+        try {
+            setApiKey(storedKey);
+        } catch (e) {
+            console.warn("An invalid API key was found in local storage. The app will use the default key.", e);
+            setApiKey(null);
+        }
+    }, [isLoginModalOpen]); // Rerender Google button when modal opens
+    
+    useEffect(() => {
+        // Load extensions specific to the logged-in user
+        if (user) {
+            try {
+                const stored = localStorage.getItem(`savedExtensions_${user.id}`);
+                if (stored) {
+                    setSavedExtensions(JSON.parse(stored));
+                } else {
+                    setSavedExtensions([]);
+                }
+            } catch (e) {
+                console.error("Failed to load user extensions from localStorage", e);
+                setSavedExtensions([]);
+            }
+        } else {
+            setSavedExtensions([]); // Clear extensions if no user is logged in
+        }
+    }, [user]);
+
+    const handleGoogleSignIn = (response: any) => {
+        const userData = decodeJwt(response.credential);
+        if (userData) {
+            const newUser: User = {
+                id: userData.sub,
+                name: userData.name,
+                email: userData.email,
+                picture: userData.picture,
+            };
+            setUser(newUser);
+            localStorage.setItem('user', JSON.stringify(newUser));
+            setIsLoginModalOpen(false);
+        }
+    };
+    
+    const handleLogout = () => {
+        setUser(null);
+        localStorage.removeItem('user');
+        window.location.hash = '/'; // Redirect to home on logout
+    };
+
 
     const handleSaveApiKey = (key: string) => {
+        setApiKey(key);
         localStorage.setItem('geminiApiKey', key);
         setUserApiKey(key);
-        setApiKey(key);
     };
 
 
@@ -780,7 +1007,10 @@ export default function App() {
     };
 
     const handleSaveExtension = useCallback(() => {
-        if (generatedFiles.length === 0) return;
+        if (generatedFiles.length === 0 || !user) {
+            if (!user) alert("Please log in to save your extensions.");
+            return;
+        }
 
         const manifestFile = generatedFiles.find(f => f.filename === 'manifest.json');
         let defaultName = 'My Extension';
@@ -810,9 +1040,9 @@ export default function App() {
 
         const updatedExtensions = [...savedExtensions, newExtension];
         setSavedExtensions(updatedExtensions);
-        localStorage.setItem('savedExtensions', JSON.stringify(updatedExtensions));
+        localStorage.setItem(`savedExtensions_${user.id}`, JSON.stringify(updatedExtensions));
         alert(`Extension "${name}" saved!`);
-    }, [generatedFiles, messages, savedExtensions]);
+    }, [generatedFiles, messages, savedExtensions, user]);
 
     const handleLoadExtension = useCallback((id: string) => {
         const extensionToLoad = savedExtensions.find(ext => ext.id === id);
@@ -824,12 +1054,13 @@ export default function App() {
     }, [savedExtensions]);
 
     const handleDeleteExtension = useCallback((id: string) => {
+        if (!user) return;
         if (window.confirm("Are you sure you want to delete this saved extension? This cannot be undone.")) {
             const updatedExtensions = savedExtensions.filter(ext => ext.id !== id);
             setSavedExtensions(updatedExtensions);
-            localStorage.setItem('savedExtensions', JSON.stringify(updatedExtensions));
+            localStorage.setItem(`savedExtensions_${user.id}`, JSON.stringify(updatedExtensions));
         }
-    }, [savedExtensions]);
+    }, [savedExtensions, user]);
 
 
     return (
@@ -839,9 +1070,15 @@ export default function App() {
                     activeTab={welcomeTab}
                     onTabChange={setWelcomeTab}
                     onGoHome={() => window.location.hash = '/'}
+                    user={user}
+                    onLoginClick={() => setIsLoginModalOpen(true)}
                 />
              ) : (
-                <BuilderHeader onGoHome={() => window.location.hash = '/'} />
+                <BuilderHeader 
+                    onGoHome={() => window.location.hash = '/'} 
+                    user={user}
+                    onLoginClick={() => setIsLoginModalOpen(true)}
+                />
              )}
 
             <main className="flex-1 overflow-hidden">
@@ -852,6 +1089,7 @@ export default function App() {
                         onSendMessage={handleSendMessage}
                         files={generatedFiles}
                         onSave={handleSaveExtension}
+                        user={user}
                     />
                 ) : route === '/' ? (
                     <HomePage
@@ -862,14 +1100,35 @@ export default function App() {
                         onDeleteExtension={handleDeleteExtension}
                         onSendMessage={handleSendMessage}
                         isLoading={isLoading}
+                        user={user}
                     />
-                ) : (
+                ) : route === '/settings' ? (
                     <SettingsPage
                         onSaveApiKey={handleSaveApiKey}
                         currentApiKey={userApiKey}
                     />
+                ) : (
+                     user && route === '/profile' ? (
+                        <ProfilePage 
+                            user={user}
+                            savedExtensions={savedExtensions}
+                            onLoadExtension={handleLoadExtension}
+                            onDeleteExtension={handleDeleteExtension}
+                            onLogout={handleLogout}
+                        />
+                     ) : <HomePage // Fallback for invalid routes or logged-out profile access
+                        activeTab={welcomeTab}
+                        onSelectTemplate={handleSelectTemplate}
+                        savedExtensions={savedExtensions}
+                        onLoadExtension={handleLoadExtension}
+                        onDeleteExtension={handleDeleteExtension}
+                        onSendMessage={handleSendMessage}
+                        isLoading={isLoading}
+                        user={user}
+                    />
                 )}
             </main>
+            <LoginModal isOpen={isLoginModalOpen} onClose={() => setIsLoginModalOpen(false)} />
         </div>
     );
 }
