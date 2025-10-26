@@ -1,0 +1,19 @@
+{
+  "framework": null,
+  "builds": [
+    {
+      "src": "index.tsx",
+      "use": "@vercel/esbuild"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/index.tsx",
+      "dest": "/index.js"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/$1"
+    }
+  ]
+}
