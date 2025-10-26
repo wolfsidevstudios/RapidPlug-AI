@@ -1,0 +1,5 @@
+{
+  "name": "AI Chrome Extension Builder",
+  "description": "Use a conversational AI to build, preview, and modify Google Chrome extensions in real-time. Download the complete source code when you're done.",
+  "requestFramePermissions": []
+}

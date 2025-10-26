@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AI Chrome Extension Builder</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <style>
+      body {
+        font-family: 'Roboto', 'Inter', sans-serif;
+        /* Swirl effect background */
+        background-color: #000000;
+        background-image:
+            radial-gradient(at 20% 80%, hsla(269, 95%, 45%, 0.25) 0px, transparent 50%),
+            radial-gradient(at 80% 10%, hsla(217, 95%, 50%, 0.25) 0px, transparent 50%),
+            radial-gradient(at 75% 75%, hsla(300, 95%, 40%, 0.2) 0px, transparent 50%);
+        background-attachment: fixed;
+      }
+      pre, code { font-family: 'Fira Code', monospace; }
+
+      /* --- Glassmorphism Overrides --- */
+      
+      /* Make main app container transparent */
+      #root > div {
+          background-color: transparent !important;
+      }
+      
+      /* Primary Panels, Cards, etc. */
+      .bg-gray-800 {
+        background-color: rgba(28, 37, 54, 0.55) !important;
+        -webkit-backdrop-filter: blur(12px) !important;
+        backdrop-filter: blur(12px) !important;
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+      }
+
+      /* Tab container backgrounds */
+      .bg-gray-900 {
+        background-color: rgba(17, 24, 39, 0.65) !important;
+        -webkit-backdrop-filter: blur(16px) !important;
+        backdrop-filter: blur(16px) !important;
+        border-color: rgba(255, 255, 255, 0.1) !important;
+      }
+      header {
+         background-color: transparent !important;
+         -webkit-backdrop-filter: none !important;
+         backdrop-filter: none !important;
+         border-width: 0 !important;
+      }
+      
+      /* Clean up Code Viewer header */
+      .bg-gray-800 > .bg-gray-900 {
+          background-color: transparent !important;
+          border: none !important;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+          -webkit-backdrop-filter: none !important;
+          backdrop-filter: none !important;
+      }
+
+      /* Borders */
+      .border-gray-700, .border-gray-600 {
+        border-color: rgba(255, 255, 255, 0.1) !important;
+      }
+      
+      /* Secondary panels, Buttons, Inputs */
+      .bg-gray-700,
+      .hover\:bg-gray-600:hover,
+      button.hover\:bg-gray-700:hover {
+        background-color: rgba(17, 24, 39, 0.6) !important;
+        -webkit-backdrop-filter: blur(8px) !important;
+        backdrop-filter: blur(8px) !important;
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+      }
+       button.bg-gray-700:hover,
+       .hover\:bg-gray-600:hover,
+       button.hover\:bg-gray-700:hover {
+         background-color: rgba(35, 45, 66, 0.7) !important;
+       }
+
+      /* Purple Buttons */
+      .bg-purple-600,
+      .bg-purple-600.text-white /* Active file/tab */
+      {
+        background-color: rgba(139, 92, 246, 0.5) !important;
+        border: 1px solid rgba(139, 92, 246, 0.8) !important;
+        -webkit-backdrop-filter: blur(8px) !important;
+        backdrop-filter: blur(8px) !important;
+      }
+      .bg-purple-600:hover, .hover\:bg-purple-700:hover {
+        background-color: rgba(139, 92, 246, 0.7) !important;
+      }
+      
+      /* Special case for live preview border */
+       .border-gray-700.border-4 {
+           border-color: rgba(55, 65, 81, 0.7) !important;
+       }
+       
+       /* Code block color in instructions */
+       code.bg-gray-700 {
+           background-color: rgba(139, 92, 246, 0.2) !important;
+           border: none !important;
+           -webkit-backdrop-filter: none !important;
+           backdrop-filter: none !important;
+       }
+
+      /* Scrollbars */
+      .scrollbar-thin::-webkit-scrollbar { width: 6px; height: 6px; }
+      .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
+      .scrollbar-thin::-webkit-scrollbar-thumb {
+        background-color: rgba(255, 255, 255, 0.2);
+        border-radius: 20px;
+      }
+
+      .carousel-scrollbar::-webkit-scrollbar { height: 8px; }
+      .carousel-scrollbar::-webkit-scrollbar-track { background: transparent; }
+      .carousel-scrollbar::-webkit-scrollbar-thumb {
+        background-color: rgba(255, 255, 255, 0.15);
+        border-radius: 20px;
+      }
+      .carousel-scrollbar::-webkit-scrollbar-thumb:hover {
+        background-color: rgba(255, 255, 255, 0.25);
+      }
+
+      .material-symbols-outlined {
+        font-variation-settings:
+        'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.27.0",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "react": "https://aistudiocdn.com/react@^19.2.0"
+  }
+}
+</script>
+</head>
+  <body class="bg-black text-gray-100 antialiased">
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>
