@@ -1,5 +1,4 @@
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
-import type { GeneratedFile, Message, SavedExtension, User } from './types';
 import { generateExtensionCode, setApiKey } from './services/geminiService';
 import { 
     SparklesIcon, FileIcon, DownloadIcon, CopyIcon, ClipboardCheckIcon, EyeIcon, 
@@ -7,13 +6,20 @@ import {
     SwatchIcon, ClockIcon, Squares2X2Icon, UploadCloudIcon, ShieldCheckIcon,
     BookmarkIcon, FolderIcon, TrashIcon, HomeIcon, AiSettingsSparkIcon, GoogleIcon
 } from './components/icons';
-import { templates, ExtensionTemplate } from './templates';
+import { templates } from './templates';
+// FIX: Import Message and ExtensionTemplate types for type safety.
+import type { Message } from './types';
+import type { ExtensionTemplate } from './templates';
 
-type ActiveTab = 'preview' | 'code' | 'instructions' | 'publishing';
-type WelcomeTab = 'templates' | 'my-extensions' | 'instructions' | 'publishing';
-type Route = '/' | '/builder' | '/settings' | '/profile';
+// FIX: Declare global window properties to resolve TypeScript errors for JSZip and google.
+declare global {
+    interface Window {
+        JSZip: any;
+        google: any;
+    }
+}
 
-const getRoute = (): Route => {
+const getRoute = () => {
     const hash = window.location.hash;
     if (hash === '#/builder') return '/builder';
     if (hash === '#/settings') return '/settings';
@@ -25,7 +31,7 @@ const GOOGLE_CLIENT_ID = "127898517822-gdv986g9281c36jlakeisg63ukp3f438.apps.goo
 
 
 // --- Utility Functions ---
-function decodeJwt(token: string): any {
+function decodeJwt(token) {
     try {
         const base64Url = token.split('.')[1];
         const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
@@ -41,7 +47,7 @@ function decodeJwt(token: string): any {
 
 
 // --- Icon Mapping for Templates ---
-const ICONS: { [key: string]: React.FC<{className?: string}> } = {
+const ICONS = {
   moon: MoonIcon,
   clipboard: ClipboardTextIcon,
   palette: SwatchIcon,
@@ -51,22 +57,16 @@ const ICONS: { [key: string]: React.FC<{className?: string}> } = {
 
 
 // --- Sub Components ---
-const UserProfileCard: React.FC<{ user: User }> = ({ user }) => (
+const UserProfileCard = ({ user }) => (
     <a href="#/profile" className="flex items-center gap-2 p-1 pr-3 bg-gray-700 rounded-full hover:bg-gray-600 transition-colors">
         <img src={user.picture} alt={user.name} className="w-8 h-8 rounded-full" />
         <span className="font-medium text-sm text-white truncate">{user.name.split(' ')[0]}</span>
     </a>
 );
 
-const HomeHeader: React.FC<{
-  activeTab: WelcomeTab;
-  onTabChange: (tab: WelcomeTab) => void;
-  onGoHome: () => void;
-  user: User | null;
-  onLoginClick: () => void;
-}> = ({ activeTab, onTabChange, onGoHome, user, onLoginClick }) => {
+const HomeHeader = ({ activeTab, onTabChange, onGoHome, user, onLoginClick }) => {
   
-  const TabButton: React.FC<{ tab: WelcomeTab; label: string; }> = ({ tab, label }) => (
+  const TabButton = ({ tab, label }) => (
     <button 
       onClick={() => onTabChange(tab)} 
       className={`text-base font-medium transition-colors whitespace-nowrap ${
@@ -108,7 +108,7 @@ const HomeHeader: React.FC<{
   )
 };
 
-const BuilderHeader: React.FC<{ onGoHome: () => void; user: User | null; onLoginClick: () => void; }> = ({ onGoHome, user, onLoginClick }) => (
+const BuilderHeader = ({ onGoHome, user, onLoginClick }) => (
    <header className="flex-shrink-0 p-4 w-full flex items-center justify-between">
        <div className="flex flex-1 items-center gap-4">
             <a href="#/settings" className="p-2 text-white" aria-label="Settings">
@@ -133,7 +133,7 @@ const BuilderHeader: React.FC<{ onGoHome: () => void; user: User | null; onLogin
     </header>
 );
 
-const ChatMessage: React.FC<{ message: Message }> = ({ message }) => {
+const ChatMessage = ({ message }) => {
     const isUser = message.role === 'user';
     return (
         <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-4`}>
@@ -144,15 +144,10 @@ const ChatMessage: React.FC<{ message: Message }> = ({ message }) => {
     );
 };
 
-interface ChatPanelProps {
-    messages: Message[];
-    isLoading: boolean;
-    onSendMessage: (input: string) => void;
-}
 
-const ChatPanel: React.FC<ChatPanelProps> = ({ messages, isLoading, onSendMessage }) => {
+const ChatPanel = ({ messages, isLoading, onSendMessage }) => {
     const [input, setInput] = useState('');
-    const messagesEndRef = useRef<HTMLDivElement>(null);
+    const messagesEndRef = useRef(null);
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -160,7 +155,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ messages, isLoading, onSendMessag
 
     useEffect(scrollToBottom, [messages, isLoading]);
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = (e) => {
         e.preventDefault();
         if (input.trim() && !isLoading) {
             onSendMessage(input);
@@ -209,7 +204,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ messages, isLoading, onSendMessag
     );
 };
 
-const FileTree: React.FC<{ files: GeneratedFile[]; selectedFilename: string | null; onSelectFile: (filename: string) => void; }> = ({ files, selectedFilename, onSelectFile }) => (
+const FileTree = ({ files, selectedFilename, onSelectFile }) => (
     <div className="bg-gray-800 p-3 rounded-lg overflow-y-auto scrollbar-thin h-full">
         <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3 px-2">Files</h3>
         <ul className="space-y-1">
@@ -225,7 +220,7 @@ const FileTree: React.FC<{ files: GeneratedFile[]; selectedFilename: string | nu
     </div>
 );
 
-const CodeViewer: React.FC<{ file: GeneratedFile | undefined; }> = ({ file }) => {
+const CodeViewer = ({ file }) => {
     const [copied, setCopied] = useState(false);
     useEffect(() => { setCopied(false); }, [file]);
     const handleCopy = () => {
@@ -253,7 +248,7 @@ const CodeViewer: React.FC<{ file: GeneratedFile | undefined; }> = ({ file }) =>
     );
 };
 
-const LivePreview: React.FC<{ files: GeneratedFile[] }> = ({ files }) => {
+const LivePreview = ({ files }) => {
     const previewDoc = useMemo(() => {
         const htmlFile = files.find(f => f.filename.endsWith('.html'));
         if (!htmlFile) return `<body style="background-color: #111827; color: #d1d5db; font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; text-align: center;"><div><h2>Preview Not Available</h2><p>This extension runs on web pages, not in a popup. Follow the instructions to test it.</p></div></body>`;
@@ -278,11 +273,8 @@ const LivePreview: React.FC<{ files: GeneratedFile[] }> = ({ files }) => {
     );
 };
 
-interface InstructionsPanelProps {
-    permissions: string[];
-}
 
-const InstructionsPanel: React.FC<InstructionsPanelProps> = ({ permissions }) => (
+const InstructionsPanel = ({ permissions }) => (
     <div className="p-6 text-gray-300 bg-gray-800 rounded-lg h-full overflow-y-auto scrollbar-thin">
         <h3 className="text-xl font-bold text-white mb-4">How to Test Your Chrome Extension</h3>
         <div className="space-y-4 text-sm">
@@ -322,7 +314,7 @@ const InstructionsPanel: React.FC<InstructionsPanelProps> = ({ permissions }) =>
 );
 
 
-const PublishingGuidePanel: React.FC = () => (
+const PublishingGuidePanel = () => (
     <div className="p-6 text-gray-300 bg-gray-800 rounded-lg h-full overflow-y-auto scrollbar-thin">
         <h3 className="text-xl font-bold text-white mb-4">How to Publish to the Chrome Web Store</h3>
         <div className="space-y-6 text-sm">
@@ -368,15 +360,9 @@ const PublishingGuidePanel: React.FC = () => (
     </div>
 );
 
-interface OutputPanelProps {
-    files: GeneratedFile[];
-    onSave: () => void;
-    user: User | null;
-}
-
-const OutputPanel: React.FC<OutputPanelProps> = ({ files, onSave, user }) => {
-    const [activeTab, setActiveTab] = useState<ActiveTab>('preview');
-    const [selectedFilename, setSelectedFilename] = useState<string | null>(null);
+const OutputPanel = ({ files, onSave, user }) => {
+    const [activeTab, setActiveTab] = useState('preview');
+    const [selectedFilename, setSelectedFilename] = useState(null);
     const selectedFile = useMemo(() => files.find(f => f.filename === selectedFilename), [files, selectedFilename]);
 
     useEffect(() => {
@@ -399,7 +385,7 @@ const OutputPanel: React.FC<OutputPanelProps> = ({ files, onSave, user }) => {
 
 
     const handleDownload = async () => {
-        const JSZip = (window as any).JSZip;
+        const JSZip = window.JSZip;
         if (!JSZip || files.length === 0) return;
         const zip = new JSZip();
         files.forEach(file => zip.file(file.filename, file.content));
@@ -413,7 +399,7 @@ const OutputPanel: React.FC<OutputPanelProps> = ({ files, onSave, user }) => {
         });
     };
 
-    const TabButton: React.FC<{ tab: ActiveTab; icon: React.ReactNode }> = ({ tab, icon }) => (
+    const TabButton = ({ tab, icon }) => (
          <button 
             onClick={() => setActiveTab(tab)} 
             className={`grid place-items-center w-8 h-8 rounded-full transition-colors duration-200 ${
@@ -461,10 +447,10 @@ const OutputPanel: React.FC<OutputPanelProps> = ({ files, onSave, user }) => {
     );
 };
 
-const TemplateCard: React.FC<{ template: ExtensionTemplate, onSelect: () => void }> = ({ template, onSelect }) => {
+const TemplateCard = ({ template, onSelect }) => {
   const Icon = ICONS[template.icon];
   return (
-    <div className="bg-gray-800 rounded-lg p-5 flex flex-col items-start text-left border border-gray-700 hover:border-purple-500 transition-all duration-200 w-80 flex-shrink-0">
+    <div className="frosted-glass rounded-lg p-5 flex flex-col items-start text-left hover:border-purple-500 transition-all duration-200 w-80 flex-shrink-0">
       <div className="bg-gray-900 p-2 rounded-lg mb-4">
         {Icon && <Icon className="w-6 h-6 text-white" />}
       </div>
@@ -477,7 +463,7 @@ const TemplateCard: React.FC<{ template: ExtensionTemplate, onSelect: () => void
   );
 };
 
-const TemplateLibrary: React.FC<{ onSelectTemplate: (template: ExtensionTemplate) => void }> = ({ onSelectTemplate }) => (
+const TemplateLibrary = ({ onSelectTemplate }) => (
     <div className="w-full max-w-7xl mx-auto px-4">
         <div className="flex gap-6 overflow-x-auto pb-4 carousel-scrollbar mt-8">
             {templates.map(template => (
@@ -487,13 +473,7 @@ const TemplateLibrary: React.FC<{ onSelectTemplate: (template: ExtensionTemplate
     </div>
 );
 
-interface SavedExtensionCardProps {
-  extension: SavedExtension;
-  onLoad: (id: string) => void;
-  onDelete: (id: string) => void;
-}
-
-const SavedExtensionCard: React.FC<SavedExtensionCardProps> = ({ extension, onLoad, onDelete }) => {
+const SavedExtensionCard = ({ extension, onLoad, onDelete }) => {
   return (
     <div className="bg-gray-800 rounded-lg p-5 flex flex-col items-start text-left border border-gray-700 transition-all duration-200">
       <div className="w-full flex justify-between items-start">
@@ -513,14 +493,7 @@ const SavedExtensionCard: React.FC<SavedExtensionCardProps> = ({ extension, onLo
   );
 };
 
-interface MyExtensionsPanelProps {
-  extensions: SavedExtension[];
-  onLoad: (id: string) => void;
-  onDelete: (id: string) => void;
-  user: User | null;
-}
-
-const MyExtensionsPanel: React.FC<MyExtensionsPanelProps> = ({ extensions, onLoad, onDelete, user }) => (
+const MyExtensionsPanel = ({ extensions, onLoad, onDelete, user }) => (
     <div className="p-6 h-full overflow-y-auto scrollbar-thin">
         <div className="text-center mb-8">
             <h2 className="text-3xl font-bold text-white">My Saved Extensions</h2>
@@ -552,14 +525,10 @@ const MyExtensionsPanel: React.FC<MyExtensionsPanelProps> = ({ extensions, onLoa
     </div>
 );
 
-interface WelcomeInputProps {
-    isLoading: boolean;
-    onSendMessage: (input: string) => void;
-}
-const WelcomeInput: React.FC<WelcomeInputProps> = ({ isLoading, onSendMessage }) => {
+const WelcomeInput = ({ isLoading, onSendMessage }) => {
     const [input, setInput] = useState('');
     
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = (e) => {
         e.preventDefault();
         if (input.trim() && !isLoading) {
             onSendMessage(input);
@@ -569,7 +538,7 @@ const WelcomeInput: React.FC<WelcomeInputProps> = ({ isLoading, onSendMessage })
 
     return (
         <form onSubmit={handleSubmit} className="w-full max-w-3xl mx-auto my-12">
-            <div className="relative bg-gray-800 border border-gray-700 rounded-3xl ring-1 ring-white/20 shadow-[0_0_25px_rgba(192,192,192,0.3)]">
+            <div className="relative frosted-glass rounded-3xl ring-1 ring-white/20 shadow-[0_0_25px_rgba(192,192,192,0.3)]">
                 <textarea
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
@@ -597,18 +566,7 @@ const WelcomeInput: React.FC<WelcomeInputProps> = ({ isLoading, onSendMessage })
 };
 
 
-interface WelcomePanelProps {
-    activeTab: WelcomeTab;
-    onSelectTemplate: (template: ExtensionTemplate) => void;
-    savedExtensions: SavedExtension[];
-    onLoadExtension: (id: string) => void;
-    onDeleteExtension: (id: string) => void;
-    onSendMessage: (input: string) => void;
-    isLoading: boolean;
-    user: User | null;
-}
-
-const WelcomePanel: React.FC<WelcomePanelProps> = ({ activeTab, onSelectTemplate, savedExtensions, onLoadExtension, onDeleteExtension, onSendMessage, isLoading, user }) => {
+const WelcomePanel = ({ activeTab, onSelectTemplate, savedExtensions, onLoadExtension, onDeleteExtension, onSendMessage, isLoading, user }) => {
     return (
         <div className="flex flex-col h-full overflow-y-auto scrollbar-thin">
             <div className="flex-shrink-0 text-center pt-16 pb-8 px-4">
@@ -628,20 +586,13 @@ const WelcomePanel: React.FC<WelcomePanelProps> = ({ activeTab, onSelectTemplate
 
 // --- Page Components ---
 
-const HomePage: React.FC<WelcomePanelProps> = (props) => (
+const HomePage = (props) => (
     <div className="h-full overflow-hidden">
         <WelcomePanel {...props} />
     </div>
 );
 
-const BuilderPage: React.FC<{
-    messages: Message[];
-    isLoading: boolean;
-    onSendMessage: (input: string) => void;
-    files: GeneratedFile[];
-    onSave: () => void;
-    user: User | null;
-}> = ({ messages, isLoading, onSendMessage, files, onSave, user }) => (
+const BuilderPage = ({ messages, isLoading, onSendMessage, files, onSave, user }) => (
     <div className="grid grid-cols-1 md:grid-cols-12 overflow-hidden h-full">
         <div className="md:col-span-4 h-full">
             <ChatPanel messages={messages} isLoading={isLoading} onSendMessage={onSendMessage} />
@@ -652,20 +603,17 @@ const BuilderPage: React.FC<{
     </div>
 );
 
-const SettingsPage: React.FC<{
-    onSaveApiKey: (key: string) => void;
-    currentApiKey: string;
-}> = ({ onSaveApiKey, currentApiKey }) => {
+const SettingsPage = ({ onSaveApiKey, currentApiKey }) => {
     const [activeSection, setActiveSection] = useState('ai-settings');
     const [apiKeyInput, setApiKeyInput] = useState(currentApiKey);
-    const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+    const [saveStatus, setSaveStatus] = useState('idle');
     const [statusMessage, setStatusMessage] = useState('');
 
     useEffect(() => {
         setApiKeyInput(currentApiKey);
     }, [currentApiKey]);
 
-    const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleInputChange = (e) => {
         setApiKeyInput(e.target.value);
         if (saveStatus !== 'idle') {
             setSaveStatus('idle');
@@ -691,7 +639,7 @@ const SettingsPage: React.FC<{
         }
     };
 
-    const SectionButton: React.FC<{ section: string; label: string; icon: React.ReactNode; }> = ({ section, label, icon }) => (
+    const SectionButton = ({ section, label, icon }) => (
         <button
             onClick={() => setActiveSection(section)}
             className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm font-medium rounded-lg transition-colors ${
@@ -770,15 +718,7 @@ const SettingsPage: React.FC<{
     );
 };
 
-interface ProfilePageProps {
-  user: User;
-  savedExtensions: SavedExtension[];
-  onLoadExtension: (id: string) => void;
-  onDeleteExtension: (id: string) => void;
-  onLogout: () => void;
-}
-
-const ProfilePage: React.FC<ProfilePageProps> = ({ user, savedExtensions, onLoadExtension, onDeleteExtension, onLogout }) => {
+const ProfilePage = ({ user, savedExtensions, onLoadExtension, onDeleteExtension, onLogout }) => {
     return (
         <div className="h-full overflow-y-auto scrollbar-thin p-4 sm:p-8">
             <div className="max-w-4xl mx-auto">
@@ -816,17 +756,12 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ user, savedExtensions, onLoad
     );
 };
 
-interface LoginModalProps {
-    isOpen: boolean;
-    onClose: () => void;
-}
-
-const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
-    const modalRef = useRef<HTMLDivElement>(null);
+const LoginModal = ({ isOpen, onClose }) => {
+    const modalRef = useRef(null);
 
     useEffect(() => {
-        const handleOutsideClick = (event: MouseEvent) => {
-            if (modalRef.current && !modalRef.current.contains(event.target as Node)) {
+        const handleOutsideClick = (event) => {
+            if (modalRef.current && !modalRef.current.contains(event.target)) {
                 onClose();
             }
         };
@@ -861,20 +796,21 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
 
 
 // --- Main App Component ---
+// FIX: Add type annotation to initialMessages to ensure correct type inference throughout the component.
 const initialMessages: Message[] = [
     { role: 'assistant', content: "Hello! I'm here to help you build a Chrome extension. What would you like to create? You can describe it, or start with a template." }
 ];
 
 export default function App() {
-    const [route, setRoute] = useState<Route>(getRoute());
-    const [welcomeTab, setWelcomeTab] = useState<WelcomeTab>('templates');
-    const [messages, setMessages] = useState<Message[]>(initialMessages);
-    const [generatedFiles, setGeneratedFiles] = useState<GeneratedFile[]>([]);
+    const [route, setRoute] = useState(getRoute());
+    const [welcomeTab, setWelcomeTab] = useState('templates');
+    const [messages, setMessages] = useState(initialMessages);
+    const [generatedFiles, setGeneratedFiles] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-    const [savedExtensions, setSavedExtensions] = useState<SavedExtension[]>([]);
+    const [error, setError] = useState(null);
+    const [savedExtensions, setSavedExtensions] = useState([]);
     const [userApiKey, setUserApiKey] = useState('');
-    const [user, setUser] = useState<User | null>(null);
+    const [user, setUser] = useState(null);
     const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
 
      useEffect(() => {
@@ -892,7 +828,7 @@ export default function App() {
         }
         
         // Initialize Google Sign-In
-        const google = (window as any).google;
+        const google = window.google;
         if (google) {
             google.accounts.id.initialize({
                 client_id: GOOGLE_CLIENT_ID,
@@ -935,10 +871,10 @@ export default function App() {
         }
     }, [user]);
 
-    const handleGoogleSignIn = (response: any) => {
+    const handleGoogleSignIn = (response) => {
         const userData = decodeJwt(response.credential);
         if (userData) {
-            const newUser: User = {
+            const newUser = {
                 id: userData.sub,
                 name: userData.name,
                 email: userData.email,
@@ -957,27 +893,27 @@ export default function App() {
     };
 
 
-    const handleSaveApiKey = (key: string) => {
+    const handleSaveApiKey = (key) => {
         setApiKey(key);
         localStorage.setItem('geminiApiKey', key);
         setUserApiKey(key);
     };
 
 
-    const handleStartNewSession = (newMessages: Message[], newFiles: GeneratedFile[] = []) => {
+    const handleStartNewSession = (newMessages, newFiles = []) => {
         setMessages(newMessages);
         setGeneratedFiles(newFiles);
         setError(null);
         window.location.hash = '/builder';
     }
 
-    const handleSendMessage = useCallback(async (input: string) => {
+    const handleSendMessage = useCallback(async (input) => {
         const isNewSession = route !== '/builder';
         const baseMessages = isNewSession ? initialMessages : messages;
         
         setIsLoading(true);
         setError(null);
-        const newMessages: Message[] = [...baseMessages, { role: 'user', content: input }];
+        const newMessages = [...baseMessages, { role: 'user', content: input }];
         setMessages(newMessages);
         if (isNewSession) {
             setGeneratedFiles([]);
@@ -997,6 +933,7 @@ export default function App() {
         }
     }, [messages, route]);
     
+    // FIX: Add type annotation to the 'template' parameter to fix type inference issues.
     const handleSelectTemplate = (template: ExtensionTemplate) => {
         const newMessages: Message[] = [
             ...initialMessages,
@@ -1029,7 +966,7 @@ export default function App() {
         const firstUserMessage = messages.find(m => m.role === 'user');
         const description = firstUserMessage ? firstUserMessage.content : "An AI-generated Chrome extension.";
 
-        const newExtension: SavedExtension = {
+        const newExtension = {
             id: Date.now().toString(),
             name,
             description,
@@ -1044,7 +981,7 @@ export default function App() {
         alert(`Extension "${name}" saved!`);
     }, [generatedFiles, messages, savedExtensions, user]);
 
-    const handleLoadExtension = useCallback((id: string) => {
+    const handleLoadExtension = useCallback((id) => {
         const extensionToLoad = savedExtensions.find(ext => ext.id === id);
         if (extensionToLoad) {
             setMessages(extensionToLoad.messages);
@@ -1053,7 +990,7 @@ export default function App() {
         }
     }, [savedExtensions]);
 
-    const handleDeleteExtension = useCallback((id: string) => {
+    const handleDeleteExtension = useCallback((id) => {
         if (!user) return;
         if (window.confirm("Are you sure you want to delete this saved extension? This cannot be undone.")) {
             const updatedExtensions = savedExtensions.filter(ext => ext.id !== id);
