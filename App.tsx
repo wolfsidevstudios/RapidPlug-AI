@@ -8,7 +8,8 @@ import {
 } from './components/icons';
 import { templates } from './templates';
 // FIX: Import Message and ExtensionTemplate types for type safety.
-import type { Message } from './types';
+// FIX: Import SavedExtension to properly type the saved extensions state.
+import type { Message, SavedExtension } from './types';
 import type { ExtensionTemplate } from './templates';
 
 // FIX: Declare global window properties to resolve TypeScript errors for JSZip and google.
@@ -525,16 +526,18 @@ const MyExtensionsPanel = ({ extensions, onLoad, onDelete, user }) => (
     </div>
 );
 
-const WelcomeInput = ({ isLoading, onSendMessage }) => {
+const WelcomeInput = ({ isLoading, onSendMessage, isInitializing }) => {
     const [input, setInput] = useState('');
     
     const handleSubmit = (e) => {
         e.preventDefault();
-        if (input.trim() && !isLoading) {
+        if (input.trim() && !isLoading && !isInitializing) {
             onSendMessage(input);
             setInput('');
         }
     };
+    
+    const isDisabled = isLoading || isInitializing;
 
     return (
         <form onSubmit={handleSubmit} className="w-full max-w-3xl mx-auto my-12">
@@ -549,13 +552,13 @@ const WelcomeInput = ({ isLoading, onSendMessage }) => {
                             handleSubmit(e);
                         }
                     }}
-                    placeholder="Describe your app, or paste an image..."
+                    placeholder={isInitializing ? "Initializing AI..." : "Describe your app, or paste an image..."}
                     className="w-full h-40 bg-transparent border-none focus:ring-0 text-gray-200 placeholder-gray-500 text-lg resize-none p-6"
-                    disabled={isLoading}
+                    disabled={isDisabled}
                 />
                 <button 
                   type="submit" 
-                  disabled={isLoading || !input.trim()} 
+                  disabled={isDisabled || !input.trim()} 
                   className="absolute bottom-6 right-6 py-2 px-5 bg-gray-200 text-gray-900 font-semibold rounded-full hover:bg-white disabled:bg-gray-500 disabled:text-gray-300 disabled:cursor-not-allowed transition-colors"
                 >
                     Build my app
@@ -566,12 +569,12 @@ const WelcomeInput = ({ isLoading, onSendMessage }) => {
 };
 
 
-const WelcomePanel = ({ activeTab, onSelectTemplate, savedExtensions, onLoadExtension, onDeleteExtension, onSendMessage, isLoading, user }) => {
+const WelcomePanel = ({ activeTab, onSelectTemplate, savedExtensions, onLoadExtension, onDeleteExtension, onSendMessage, isLoading, user, isInitializing }) => {
     return (
         <div className="flex flex-col h-full overflow-y-auto scrollbar-thin">
             <div className="flex-shrink-0 text-center pt-16 pb-8 px-4">
                 <h2 className="text-5xl lg:text-6xl font-bold text-white tracking-tight">Build anything with RapidPlug AI</h2>
-                <WelcomeInput isLoading={isLoading} onSendMessage={onSendMessage} />
+                <WelcomeInput isLoading={isLoading} onSendMessage={onSendMessage} isInitializing={isInitializing} />
             </div>
 
             <div className="w-full flex-grow">
@@ -808,10 +811,12 @@ export default function App() {
     const [generatedFiles, setGeneratedFiles] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState(null);
-    const [savedExtensions, setSavedExtensions] = useState([]);
+    // FIX: Provide a type for the savedExtensions state to prevent type errors when loading extensions from localStorage.
+    const [savedExtensions, setSavedExtensions] = useState<SavedExtension[]>([]);
     const [userApiKey, setUserApiKey] = useState('');
     const [user, setUser] = useState(null);
     const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+    const [isInitializing, setIsInitializing] = useState(true);
 
      useEffect(() => {
         const handleHashChange = () => setRoute(getRoute());
@@ -820,37 +825,73 @@ export default function App() {
     }, []);
 
      useEffect(() => {
-        // Load user session from local storage
-        const storedUser = localStorage.getItem('user');
-        if (storedUser) {
-            const parsedUser = JSON.parse(storedUser);
-            setUser(parsedUser);
-        }
-        
-        // Initialize Google Sign-In
-        const google = window.google;
-        if (google) {
-            google.accounts.id.initialize({
-                client_id: GOOGLE_CLIENT_ID,
-                callback: handleGoogleSignIn,
-            });
-             google.accounts.id.renderButton(
-                document.getElementById("google-signin-button"),
-                { theme: "outline", size: "large", type: 'standard', shape: 'pill', text: 'signin_with' } 
-            );
-        } else {
-            console.error("Google GSI client not loaded.");
-        }
+        // This effect runs only once on initial app load.
+        const initializeApp = async () => {
+            setIsInitializing(true);
+            
+            // Step 1: Check for user-provided key in local storage.
+            let key = localStorage.getItem('geminiApiKey');
 
-        const storedKey = localStorage.getItem('geminiApiKey') || '';
-        setUserApiKey(storedKey);
-        try {
-            setApiKey(storedKey);
-        } catch (e) {
-            console.warn("An invalid API key was found in local storage. The app will use the default key.", e);
-            setApiKey(null);
+            // Step 2: If no user key, fetch the default key from the serverless function.
+            if (!key) {
+                try {
+                    const response = await fetch('/api/get-key');
+                    if (response.ok) {
+                        const data = await response.json();
+                        key = data.apiKey;
+                    } else {
+                         console.error("Failed to fetch default API key from server.");
+                    }
+                } catch (e) {
+                    console.error("Error fetching default API key:", e);
+                }
+            }
+
+            // Step 3: Initialize the AI service with the found key.
+            try {
+                if (key) {
+                    setApiKey(key);
+                    setUserApiKey(key); // Also update state for settings page
+                } else {
+                    // Handle case where no key is available at all
+                    console.warn("No API key available. AI features will be disabled until a key is provided in settings.");
+                    setApiKey(null);
+                }
+            } catch (e) {
+                console.error("Failed to set API key:", e);
+                setApiKey(null);
+            } finally {
+                setIsInitializing(false);
+            }
+
+            // Load user session
+            const storedUser = localStorage.getItem('user');
+            if (storedUser) {
+                setUser(JSON.parse(storedUser));
+            }
+        };
+        
+        initializeApp();
+    }, []);
+
+     useEffect(() => {
+        // Initialize Google Sign-In button whenever the modal is opened
+        if (isLoginModalOpen) {
+            const google = window.google;
+            if (google && google.accounts) {
+                google.accounts.id.initialize({
+                    client_id: GOOGLE_CLIENT_ID,
+                    callback: handleGoogleSignIn,
+                });
+                google.accounts.id.renderButton(
+                    document.getElementById("google-signin-button"),
+                    { theme: "outline", size: "large", type: 'standard', shape: 'pill', text: 'signin_with' } 
+                );
+            } else {
+                console.error("Google GSI client not ready.");
+            }
         }
-    }, [isLoginModalOpen]); // Rerender Google button when modal opens
+    }, [isLoginModalOpen]);
     
     useEffect(() => {
         // Load extensions specific to the logged-in user
@@ -913,7 +954,7 @@ export default function App() {
         
         setIsLoading(true);
         setError(null);
-        const newMessages = [...baseMessages, { role: 'user', content: input }];
+        const newMessages: Message[] = [...baseMessages, { role: 'user', content: input }];
         setMessages(newMessages);
         if (isNewSession) {
             setGeneratedFiles([]);
@@ -966,7 +1007,7 @@ export default function App() {
         const firstUserMessage = messages.find(m => m.role === 'user');
         const description = firstUserMessage ? firstUserMessage.content : "An AI-generated Chrome extension.";
 
-        const newExtension = {
+        const newExtension: SavedExtension = {
             id: Date.now().toString(),
             name,
             description,
@@ -981,7 +1022,7 @@ export default function App() {
         alert(`Extension "${name}" saved!`);
     }, [generatedFiles, messages, savedExtensions, user]);
 
-    const handleLoadExtension = useCallback((id) => {
+    const handleLoadExtension = useCallback((id: string) => {
         const extensionToLoad = savedExtensions.find(ext => ext.id === id);
         if (extensionToLoad) {
             setMessages(extensionToLoad.messages);
@@ -990,7 +1031,7 @@ export default function App() {
         }
     }, [savedExtensions]);
 
-    const handleDeleteExtension = useCallback((id) => {
+    const handleDeleteExtension = useCallback((id: string) => {
         if (!user) return;
         if (window.confirm("Are you sure you want to delete this saved extension? This cannot be undone.")) {
             const updatedExtensions = savedExtensions.filter(ext => ext.id !== id);
@@ -1038,6 +1079,7 @@ export default function App() {
                         onSendMessage={handleSendMessage}
                         isLoading={isLoading}
                         user={user}
+                        isInitializing={isInitializing}
                     />
                 ) : route === '/settings' ? (
                     <SettingsPage
@@ -1062,6 +1104,7 @@ export default function App() {
                         onSendMessage={handleSendMessage}
                         isLoading={isLoading}
                         user={user}
+                        isInitializing={isInitializing}
                     />
                 )}
             </main>
