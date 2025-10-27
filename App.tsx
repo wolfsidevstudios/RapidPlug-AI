@@ -168,7 +168,7 @@ const ChatPanel = ({ messages, isLoading, onSendMessage }) => {
     };
 
     return (
-        <div className="flex flex-col h-full bg-gray-800 border-r border-gray-700">
+        <div className="flex flex-col h-full bg-gray-800 rounded-lg overflow-hidden">
             <div className="flex-1 p-4 overflow-y-scroll scrollbar-thin">
                 {messages.map((msg, index) => <ChatMessage key={index} message={msg} />)}
                 {isLoading && (
@@ -364,8 +364,8 @@ const PublishingGuidePanel = () => (
     </div>
 );
 
-const OutputPanel = ({ files, onSave, user }) => {
-    const [activeTab, setActiveTab] = useState('preview');
+const OutputPanel = ({ files, onSave, user, messages, isLoading, onSendMessage }) => {
+    const [activeTab, setActiveTab] = useState('chat');
     const [selectedFilename, setSelectedFilename] = useState(null);
     const selectedFile = useMemo(() => files.find(f => f.filename === selectedFilename), [files, selectedFilename]);
 
@@ -420,6 +420,7 @@ const OutputPanel = ({ files, onSave, user }) => {
         <div className="flex flex-col h-full p-4 gap-4">
             <div className="flex-shrink-0 flex flex-col sm:flex-row justify-between items-center gap-3">
                 <div className="flex items-center gap-1 p-1 bg-gray-900 rounded-full">
+                    <TabButton tab="chat" icon={<SparklesIcon className="w-5 h-5" />} />
                     <TabButton tab="preview" icon={<EyeIcon className="w-5 h-5" />} />
                     <TabButton tab="code" icon={<CodeBracketIcon className="w-5 h-5" />} />
                     <TabButton tab="instructions" icon={<InformationCircleIcon className="w-5 h-5" />} />
@@ -437,6 +438,11 @@ const OutputPanel = ({ files, onSave, user }) => {
                 </div>
             </div>
             <div className="flex-1 overflow-hidden">
+                {activeTab === 'chat' && (
+                    <div className="h-full">
+                        <ChatPanel messages={messages} isLoading={isLoading} onSendMessage={onSendMessage} />
+                    </div>
+                )}
                 {activeTab === 'preview' && <LivePreview files={files} />}
                 {activeTab === 'code' && (
                     <div className="grid grid-cols-12 gap-4 h-full">
@@ -603,14 +609,14 @@ const HomePage = (props) => (
 );
 
 const BuilderPage = ({ messages, isLoading, onSendMessage, files, onSave, user }) => (
-    <div className="grid grid-cols-1 md:grid-cols-12 overflow-hidden h-full">
-        <div className="md:col-span-3 h-full">
-            <ChatPanel messages={messages} isLoading={isLoading} onSendMessage={onSendMessage} />
-        </div>
-        <div className="md:col-span-9 h-full">
-            <OutputPanel files={files} onSave={onSave} user={user} />
-        </div>
-    </div>
+    <OutputPanel 
+        files={files} 
+        onSave={onSave} 
+        user={user}
+        messages={messages}
+        isLoading={isLoading}
+        onSendMessage={onSendMessage}
+    />
 );
 
 const SettingsPage = ({ onSaveApiKey, currentApiKey }) => {
