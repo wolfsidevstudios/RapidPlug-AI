@@ -54,6 +54,7 @@ const ICONS = {
   palette: SwatchIcon,
   timer: ClockIcon,
   clock: ClockIcon,
+  squares: Squares2X2Icon,
 };
 
 
@@ -134,7 +135,8 @@ const BuilderHeader = ({ onGoHome, user, onLoginClick }) => (
     </header>
 );
 
-const ChatMessage = ({ message }) => {
+// FIX: Explicitly define component props to prevent type errors when using it in a list with a 'key' prop.
+const ChatMessage = ({ message }: { message: Message }) => {
     const isUser = message.role === 'user';
     return (
         <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-4`}>
@@ -448,7 +450,8 @@ const OutputPanel = ({ files, onSave, user }) => {
     );
 };
 
-const TemplateCard = ({ template, onSelect }) => {
+// FIX: Explicitly define component props to prevent type errors when using it in a list with a 'key' prop.
+const TemplateCard = ({ template, onSelect }: { template: ExtensionTemplate, onSelect: () => void }) => {
   const Icon = ICONS[template.icon];
   return (
     <div className="frosted-glass rounded-lg p-5 flex flex-col items-start text-left hover:border-purple-500 transition-all duration-200 w-80 flex-shrink-0">
@@ -474,7 +477,8 @@ const TemplateLibrary = ({ onSelectTemplate }) => (
     </div>
 );
 
-const SavedExtensionCard = ({ extension, onLoad, onDelete }) => {
+// FIX: Explicitly define component props to prevent type errors when using it in a list with a 'key' prop.
+const SavedExtensionCard = ({ extension, onLoad, onDelete }: { extension: SavedExtension, onLoad: (id: string) => void, onDelete: (id: string) => void }) => {
   return (
     <div className="bg-gray-800 rounded-lg p-5 flex flex-col items-start text-left border border-gray-700 transition-all duration-200">
       <div className="w-full flex justify-between items-start">
@@ -597,10 +601,10 @@ const HomePage = (props) => (
 
 const BuilderPage = ({ messages, isLoading, onSendMessage, files, onSave, user }) => (
     <div className="grid grid-cols-1 md:grid-cols-12 overflow-hidden h-full">
-        <div className="md:col-span-4 h-full">
+        <div className="md:col-span-3 h-full">
             <ChatPanel messages={messages} isLoading={isLoading} onSendMessage={onSendMessage} />
         </div>
-        <div className="md:col-span-8 h-full">
+        <div className="md:col-span-9 h-full">
             <OutputPanel files={files} onSave={onSave} user={user} />
         </div>
     </div>
