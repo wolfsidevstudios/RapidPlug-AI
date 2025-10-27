@@ -136,7 +136,8 @@ const BuilderHeader = ({ onGoHome, user, onLoginClick }) => (
 );
 
 // FIX: Explicitly define component props to prevent type errors when using it in a list with a 'key' prop.
-const ChatMessage = ({ message }: { message: Message }) => {
+// FIX: Explicitly type component with React.FC to correctly handle the 'key' prop in lists.
+const ChatMessage: React.FC<{ message: Message }> = ({ message }) => {
     const isUser = message.role === 'user';
     return (
         <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-4`}>
@@ -168,7 +169,7 @@ const ChatPanel = ({ messages, isLoading, onSendMessage }) => {
 
     return (
         <div className="flex flex-col h-full bg-gray-800 border-r border-gray-700">
-            <div className="flex-1 p-4 overflow-y-auto scrollbar-thin">
+            <div className="flex-1 p-4 overflow-y-scroll scrollbar-thin">
                 {messages.map((msg, index) => <ChatMessage key={index} message={msg} />)}
                 {isLoading && (
                     <div className="flex justify-start mb-4">
@@ -451,7 +452,8 @@ const OutputPanel = ({ files, onSave, user }) => {
 };
 
 // FIX: Explicitly define component props to prevent type errors when using it in a list with a 'key' prop.
-const TemplateCard = ({ template, onSelect }: { template: ExtensionTemplate, onSelect: () => void }) => {
+// FIX: Explicitly type component with React.FC to correctly handle the 'key' prop in lists.
+const TemplateCard: React.FC<{ template: ExtensionTemplate, onSelect: () => void }> = ({ template, onSelect }) => {
   const Icon = ICONS[template.icon];
   return (
     <div className="frosted-glass rounded-lg p-5 flex flex-col items-start text-left hover:border-purple-500 transition-all duration-200 w-80 flex-shrink-0">
@@ -478,7 +480,8 @@ const TemplateLibrary = ({ onSelectTemplate }) => (
 );
 
 // FIX: Explicitly define component props to prevent type errors when using it in a list with a 'key' prop.
-const SavedExtensionCard = ({ extension, onLoad, onDelete }: { extension: SavedExtension, onLoad: (id: string) => void, onDelete: (id: string) => void }) => {
+// FIX: Explicitly type component with React.FC to correctly handle the 'key' prop in lists.
+const SavedExtensionCard: React.FC<{ extension: SavedExtension, onLoad: (id: string) => void, onDelete: (id: string) => void }> = ({ extension, onLoad, onDelete }) => {
   return (
     <div className="bg-gray-800 rounded-lg p-5 flex flex-col items-start text-left border border-gray-700 transition-all duration-200">
       <div className="w-full flex justify-between items-start">
